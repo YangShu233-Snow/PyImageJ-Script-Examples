@@ -1,18 +1,14 @@
-from typing import Literal
-
 import imagej
 import numpy as np
 import pandas as pd
 import os
-import glob
-from jpype import JClass
 import pandas as pd
 from pathlib import Path
 from skimage import filters, measure
 import scyjava as sj
 import xarray
 
-FIJI_PATH = "~/Fiji/Fiji.app"
+FIJI_PATH = "sc.fiji:fiji:2.14.0"
 
 def process_czi_imagej(ij: imagej.GatewayAddons, input_czi: Path|str, output_csv: Path|str)->bool:
     print("Setting Bio-Formats Options...")
@@ -65,7 +61,7 @@ def process_czi_imagej(ij: imagej.GatewayAddons, input_czi: Path|str, output_csv
     bg_brighrness_median = np.median(background_pixels)
     bg_brighrness_std = np.std(background_pixels)
     
-
+    # select cell area and calculate fluorsence intensity
     results = []
     for prop in cell_props:
         physical_area = prop.area * pixel_physical_area
@@ -90,6 +86,7 @@ def process_czi_imagej(ij: imagej.GatewayAddons, input_czi: Path|str, output_csv
                 'Corrected_Fluorescence_Intensity': prop.intensity_mean - bg_brighrness_mean
             })
 
+    # save data
     df = pd.DataFrame(results)
     df.to_csv(output_csv, index=False)
     print(f"Processed {os.path.basename(input_czi)} -> Found {len(df)} cells.")
@@ -97,10 +94,17 @@ def process_czi_imagej(ij: imagej.GatewayAddons, input_czi: Path|str, output_csv
 
 def main():
     print("Initializing ImageJ2 (Headless)...")
+    sj.config.add_options('-Xmx6g')
     ij: imagej.GatewayAddons = imagej.init(FIJI_PATH, mode=imagej.Mode.HEADLESS)
     print(f"ImageJ2 initialized. Version: {ij.getVersion()}")
 
-    process_czi_imagej(ij, "./data/A549/A549-CON-40-1.czi", "./results/A549-CON-40-1.csv")
+    for path in Path('./data').glob("*"):
+        targer_dir = Path(f"./output/{path.name}")
+        Path.mkdir(targer_dir, exist_ok=True)
+
+        for file_path in Path(path).glob("*"):
+            print(file_path.name[:-4])
+            process_czi_imagej(ij, file_path, f"{targer_dir}/{file_path.name[:-4]}.csv")
 
 
 if __name__ == "__main__":
